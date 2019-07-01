@@ -21,6 +21,8 @@ import time
 
 from math import sin, cos, sqrt, atan2, radians
 
+from urllib2 import HTTPError
+
 ## TODO
 # 1. Exception handling
 # 2. Method to set temperature (with menu for F/C)
@@ -151,7 +153,11 @@ class Plugin(indigo.PluginBase):
 		i = 0
 		validReasons = ["already on", "already off",""]
 		while True:
-			response = vehicle.command(commandName, data)
+			try:
+				response = vehicle.command(commandName, data)
+			except HTTPError as h:
+				self.errorLog(h)
+				self.errorLog("Timeout issuing command: {} {}".format(commandName,str(data)))
 			self.debugLog(response)
 			if (response["response"]["reason"] in validReasons) or response["response"]["result"] == True:
 				self.debugLog("Success")
@@ -195,7 +201,11 @@ class Plugin(indigo.PluginBase):
 			self.vehicleStatus2(action,vehicleId,devId)
 			return
 		
-		response = vehicle.data_request(statusName)
+		try:
+			response = vehicle.data_request(statusName)
+		except HTTPError as h:
+			self.errorLog(h)
+			self.errorLog("Timeout retrieving status: {}".format(statusName))
 		self.debugLog(str(response))
 		self.debugLog("")
 		for k,v in sorted(response.items()):
