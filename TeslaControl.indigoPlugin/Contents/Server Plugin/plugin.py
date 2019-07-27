@@ -22,6 +22,7 @@ import time
 from math import sin, cos, sqrt, atan2, radians
 
 from urllib2 import HTTPError
+import traceback
 
 ## TODO
 # 1. Exception handling
@@ -105,8 +106,13 @@ class Plugin(indigo.PluginBase):
 	def getVehicles(self):
 		if not self.vehicles:
 			indigo.server.log("Fetching vehicles...")
-			connection = teslajson.Connection(self.pluginPrefs['username'],
+			try:
+				connection = teslajson.Connection(self.pluginPrefs['username'],
 											  self.pluginPrefs['password'])
+			except Exception as e:
+				self.errorLog(e)
+				self.errorLog("Error creating connection")
+				self.debugLog(traceback.format_exc())
 			self.vehicles = dict((unicode(v['id']),v) for v in connection.vehicles)
 			indigo.server.log("%i vehicles found" % len(self.vehicles))
 		return self.vehicles
@@ -145,21 +151,29 @@ class Plugin(indigo.PluginBase):
 		indigo.server.log("Tesla command %s for vehicle %s" % (commandName, vehicleId))
 		vehicle = self.getVehicles()[vehicleId]
 		if commandName == "wake_up":
-			response = vehicle.wake_up()
-			self.debugLog(response)
+			self.response = vehicle.wake_up()
+			self.debugLog(self.response)
 			return
 		data = action.props
 		#self.debugLog(data)
 		i = 0
 		validReasons = ["already on", "already off",""]
+		self.response = "Incomplete"
 		while True:
 			try:
-				response = vehicle.command(commandName, data)
+				self.response = vehicle.command(commandName, data)
 			except HTTPError as h:
 				self.errorLog(h)
 				self.errorLog("Timeout issuing command: {} {}".format(commandName,str(data)))
-			self.debugLog(response)
-			if (response["response"]["reason"] in validReasons) or response["response"]["result"] == True:
+				self.debugLog(traceback.format_exc())
+			except Exception as e:
+				self.errorLog(e)
+				self.errorLog("Error issuing command: {} {}".format(commandName,str(data)))
+				self.debugLog(traceback.format_exc())
+			self.debugLog(self.response)
+			if (self.response == "Incomplete"):
+				break
+			if (self.response["response"]["reason"] in validReasons) or self.response["response"]["result"] == True:
 				self.debugLog("Success")
 				action.pluginTypeId = self.cmdStates[commandName]
 				self.vehicleStatus(action,dev)
@@ -180,7 +194,7 @@ class Plugin(indigo.PluginBase):
 		self.vehicleStatus2(statusName,vehicleId,dev.id)
 		
 	def vehicleStatus2(self,statusName,vehicleId,devId):
-		indigo.server.log("Tesla request %s for vehicle %s" % (statusName, vehicleId))
+		indigo.server.log("Tesla request %s for vehicle %s: Initialising" % (statusName, vehicleId))
 		vehicle = self.getVehicles()[vehicleId]
 		dev = indigo.devices[devId]
 		
@@ -200,15 +214,24 @@ class Plugin(indigo.PluginBase):
 			action = "vehicle_config"
 			self.vehicleStatus2(action,vehicleId,devId)
 			return
-		
+		self.response = "Incomplete"
 		try:
-			response = vehicle.data_request(statusName)
+			self.response = vehicle.data_request(statusName)
 		except HTTPError as h:
 			self.errorLog(h)
 			self.errorLog("Timeout retrieving status: {}".format(statusName))
-		self.debugLog(str(response))
+			self.debugLog(traceback.format_exc())
+		except Exception as e:
+			self.errorLog(e)
+			self.errorLog("Timeout retrieving status: {}".format(statusName))
+			self.debugLog(traceback.format_exc())
+		else:
+			indigo.server.log("Tesla request %s for vehicle %s: Data received" % (statusName, vehicleId))
+		self.debugLog(str(self.response))
 		self.debugLog("")
-		for k,v in sorted(response.items()):
+		if (self.response == "Incomplete"):
+			return
+		for k,v in sorted(self.response.items()):
 			self.debugLog("State %s, value %s, type %s" % (k,v,type(v)))
 			self.states[k] = v
 			if (type(v) is dict):
@@ -220,6 +243,7 @@ class Plugin(indigo.PluginBase):
 					if (k == dev.ownerProps.get("stateToDisplay","")):
 						dev.updateStateOnServer("displayState",v)
 				else:
+					indigo.server.log("New states found - recreating state list...")
 					self.resetStates = True #We obviously need to reset states if we've got data for one that doesn't exist
 					if (v == None):
 						self.strstates[k] = v

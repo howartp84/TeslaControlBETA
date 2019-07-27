@@ -51,14 +51,22 @@ class Connection(object):
 		self.expiration = float('inf')
 		self.__sethead(access_token)
 		if not access_token:
-			tesla_client = self.__open2("/raw/0a8e0xTJ", baseurl="http://pastebin.com") #http://pastebin.com/raw/0a8e0xTJ   OR  https://pastebin.com/YiLPDggh
-			current_client = tesla_client['v1']
-			self.baseurl = current_client['baseurl']
-			self.api = current_client['api']
+			#tesla_client = self.__open("/raw/0a8e0xTJ", baseurl="http://pastebin.com") #http://pastebin.com/raw/0a8e0xTJ is GGlockner's
+			tesla_client = self.__open2("/raw/pS7Z6yyP", baseurl="http://pastebin.com") #This is TimDorr's version, without id and api
+			# https://pastebin.com/YiLPDggh is maintained by another user but MAY get updated quicker if TimDorr is absent
+			#current_client = tesla_client['v1']
+			#self.baseurl = current_client['baseurl']
+			#self.api = current_client['api']
+			#self.oauth = {
+				#"grant_type" : "password",
+				#"client_id" : current_client['id'],
+				#"client_secret" : current_client['secret'],
+				#"email" : email,
+				#"password" : password }
 			self.oauth = {
 				"grant_type" : "password",
-				"client_id" : current_client['id'],
-				"client_secret" : current_client['secret'],
+				"client_id" : tesla_client['id'],
+				"client_secret" : tesla_client['secret'],
 				"email" : email,
 				"password" : password }
 			self.expiration = 0 # force refresh
@@ -102,15 +110,9 @@ class Connection(object):
 		if not baseurl:
 			baseurl = self.baseurl
 		req = Request("%s%s" % (baseurl, url), headers=headers)
-		try:
-			req.data = urlencode(data).encode('utf-8') # Python 3
-		except:
-			try:
-				req.add_data(urlencode(data)) # Python 2
-			except:
-				pass
 		resp = urlopen(req)
 		charset = resp.info().get('charset', 'utf-8')
+		
 		return json.loads(resp.read().decode(charset))
 
 class Vehicle(dict):

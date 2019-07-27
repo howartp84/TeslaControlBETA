@@ -51,7 +51,7 @@ class Connection(object):
 		self.expiration = float('inf')
 		self.__sethead(access_token)
 		if not access_token:
-			tesla_client = self.__open2("/raw/0a8e0xTJ", baseurl="http://pastebin.com") #http://pastebin.com/raw/0a8e0xTJ   OR  https://pastebin.com/YiLPDggh
+			tesla_client = self.__open("/raw/0a8e0xTJ", baseurl="http://pastebin.com") #http://pastebin.com/raw/0a8e0xTJ   OR  https://pastebin.com/YiLPDggh
 			current_client = tesla_client['v1']
 			self.baseurl = current_client['baseurl']
 			self.api = current_client['api']
@@ -97,21 +97,6 @@ class Connection(object):
 		charset = resp.info().get('charset', 'utf-8')
 		return json.loads(resp.read().decode(charset))
 
-	def __open2(self, url, headers={}, data=None, baseurl=""):
-		"""Raw urlopen command"""
-		if not baseurl:
-			baseurl = self.baseurl
-		req = Request("%s%s" % (baseurl, url), headers=headers)
-		try:
-			req.data = urlencode(data).encode('utf-8') # Python 3
-		except:
-			try:
-				req.add_data(urlencode(data)) # Python 2
-			except:
-				pass
-		resp = urlopen(req)
-		charset = resp.info().get('charset', 'utf-8')
-		return json.loads(resp.read().decode(charset))
 
 class Vehicle(dict):
 	"""Vehicle class, subclassed from dictionary.
