@@ -35,6 +35,8 @@ class Plugin(indigo.PluginBase):
 	def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
 		indigo.PluginBase.__init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs)
 		self.debug = pluginPrefs.get("showDebugInfo", True)
+		self.version = pluginVersion
+		
 		self.vehicles = []
 		#self.debug = True
 		
@@ -78,6 +80,17 @@ class Plugin(indigo.PluginBase):
 		#self.debugLog("Username: %s" % self.pluginPrefs.get("username","(Not yet saved)"))
 		#self.debugLog("Username: %s" % self.un)
 		#self.getVehicles()
+		
+	def closedPrefsConfigUi(self, valuesDict, userCancelled):
+		# Since the dialog closed we want to set the debug flag - if you don't directly use
+		# a plugin's properties (and for debugLog we don't) you'll want to translate it to
+		# the appropriate stuff here.
+		if not userCancelled:
+			self.debug = valuesDict.get("showDebugInfo", False)
+			if self.debug:
+				indigo.server.log("Debug logging enabled")
+			else:
+				indigo.server.log("Debug logging disabled")
 
 	def getDeviceStateList(self, dev): #Override state list
 		stateList = indigo.PluginBase.getDeviceStateList(self, dev)      
@@ -107,11 +120,12 @@ class Plugin(indigo.PluginBase):
 		if not self.vehicles:
 			indigo.server.log("Fetching vehicles...")
 			try:
-				connection = teslajson.Connection(self.pluginPrefs['username'],
-											  self.pluginPrefs['password'])
+				connection = teslajson.Connection(self.pluginPrefs['username'],self.pluginPrefs['password'])
+				self.debugLog("Using API token: {}".format(connection.oauth['client_id']))
 			except Exception as e:
 				self.errorLog(e)
 				self.errorLog("Error creating connection")
+				self.errorLog("Plugin version: {}".format(self.version))
 				self.debugLog(traceback.format_exc())
 			self.vehicles = dict((unicode(v['id']),v) for v in connection.vehicles)
 			indigo.server.log("%i vehicles found" % len(self.vehicles))
@@ -165,10 +179,12 @@ class Plugin(indigo.PluginBase):
 			except HTTPError as h:
 				self.errorLog(h)
 				self.errorLog("Timeout issuing command: {} {}".format(commandName,str(data)))
+				self.errorLog("Plugin version: {}".format(self.version))
 				self.debugLog(traceback.format_exc())
 			except Exception as e:
 				self.errorLog(e)
 				self.errorLog("Error issuing command: {} {}".format(commandName,str(data)))
+				self.errorLog("Plugin version: {}".format(self.version))
 				self.debugLog(traceback.format_exc())
 			self.debugLog(self.response)
 			if (self.response == "Incomplete"):
@@ -243,7 +259,7 @@ class Plugin(indigo.PluginBase):
 					if (k == dev.ownerProps.get("stateToDisplay","")):
 						dev.updateStateOnServer("displayState",v)
 				else:
-					indigo.server.log("New states found - recreating state list...")
+					self.debugLog("New states found - recreating state list...")
 					self.resetStates = True #We obviously need to reset states if we've got data for one that doesn't exist
 					if (v == None):
 						self.strstates[k] = v
@@ -260,10 +276,12 @@ class Plugin(indigo.PluginBase):
 					else:
 						self.strstates[k] = v
 		if (self.resetStates):
+			indigo.server.log("Tesla request %s for vehicle %s: New states found - reinitialising" % (statusName, vehicleId))
 			dev.stateListOrDisplayStateIdChanged()
 			self.resetStates = False
 			self.vehicleStatus2(statusName,vehicleId,devId) #Re-do this request now the states are reset
 			return
+		indigo.server.log("Tesla request %s for vehicle %s: Completed" % (statusName, vehicleId))
 
 		#self.debugLog(str(dev.states))
 		if (statusName == "drive_state"):
@@ -299,16 +317,12 @@ class Plugin(indigo.PluginBase):
 		#self.debugLog(u"Should be: 278.546 km")
 		return distance
 	
-#	def runConcurrentThread(self):
-#		try:
-#			while True:
-#				for v in indigo.devices.iter("self.teslacontrol"):
-#					if len(v.states) <10:
-#						anAction = action()
-#						action.pluginTypeId = "doRefresh"
-#						self.vehicleStatus(action,dev)
-#				# Do your stuff here
-#				self.sleep(60) # in seconds
-#		except self.StopThread:
-#			# do any cleanup here
-#			pass
+	def runConcurrentThread(self):
+		try:
+			while True:
+				if not self.vehicles:
+					self.getVehicles()
+				self.sleep(60) # in seconds
+		except self.StopThread:
+			# do any cleanup here
+			pass

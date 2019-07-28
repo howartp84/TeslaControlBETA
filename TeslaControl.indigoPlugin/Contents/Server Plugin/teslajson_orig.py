@@ -51,12 +51,14 @@ class Connection(object):
 		self.expiration = float('inf')
 		self.__sethead(access_token)
 		if not access_token:
-			tesla_client = self.__open2("/raw/pS7Z6yyP", baseurl="http://pastebin.com") #This is TimDorr's version, without id and api
-			#raise ValueError(tesla_client[0])
+			tesla_client = self.__open2("/raw/0a8e0xTJ", baseurl="http://pastebin.com") #http://pastebin.com/raw/0a8e0xTJ   OR  https://pastebin.com/YiLPDggh
+			current_client = tesla_client['v1']
+			self.baseurl = current_client['baseurl']
+			self.api = current_client['api']
 			self.oauth = {
 				"grant_type" : "password",
-				"client_id" : tesla_client[0],
-				"client_secret" : tesla_client[1],
+				"client_id" : current_client['id'],
+				"client_secret" : current_client['secret'],
 				"email" : email,
 				"password" : password }
 			self.expiration = 0 # force refresh
@@ -100,13 +102,16 @@ class Connection(object):
 		if not baseurl:
 			baseurl = self.baseurl
 		req = Request("%s%s" % (baseurl, url), headers=headers)
+		try:
+			req.data = urlencode(data).encode('utf-8') # Python 3
+		except:
+			try:
+				req.add_data(urlencode(data)) # Python 2
+			except:
+				pass
 		resp = urlopen(req)
 		charset = resp.info().get('charset', 'utf-8')
-		raw = resp.read().decode(charset).splitlines()
-		tID = raw[0][16:]
-		tSecret = raw[1][20:]
-		#raise ValueError("{} {}".format(tID,tSecret)) #For testing
-		return tID, tSecret
+		return json.loads(resp.read().decode(charset))
 
 class Vehicle(dict):
 	"""Vehicle class, subclassed from dictionary.
