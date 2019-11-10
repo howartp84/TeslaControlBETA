@@ -185,6 +185,7 @@ class Plugin(indigo.PluginBase):
 		while True:
 			try:
 				self.response = vehicle.command(commandName, data)
+				#self.debugLog(self.response)
 			except HTTPError as h:
 				self.errorLog(h)
 				self.errorLog("Timeout issuing command: {} {}".format(commandName,str(data)))
@@ -199,13 +200,22 @@ class Plugin(indigo.PluginBase):
 			if (self.response == "Incomplete"):
 				break
 			if (self.response["response"]["reason"] in validReasons) or self.response["response"]["result"] == True:
-				self.debugLog("Success")
+				self.debugLog("Sent %s successfully.  Refreshing appropriate states..." % commandName)
 				action.pluginTypeId = self.cmdStates[commandName]
 				self.vehicleStatus(action,dev)
 				break
+			else:
+				self.debugLog(u"Failed attempt %s/5 because: %s" % (i,self.response["response"]["reason"]))
+				if i > 3:
+					self.debugLog(u"Automatically sending wake_up command before retrying...")
+					vehicle.wake_up() #Try waking it up 
+					self.debugLog(u"Waiting 30 seconds before retrying...")
+					time.sleep(20) #20 seconds here because loop waits 10 itself
+				else:
+					self.debugLog(u"Retrying in 10 seconds...")
 			if i >= 5:
-				self.debugLog("Failed")
-				indigo.server.log(u"%s failed after 5 attempts" % commandName)
+				#self.debugLog("Failed")
+				indigo.server.log(u"%s failed after 5 attempts." % commandName)
 				break
 			i= i+1
 			time.sleep(10)
@@ -258,12 +268,12 @@ class Plugin(indigo.PluginBase):
 			self.debugLog(traceback.format_exc())
 		else:
 			indigo.server.log("Tesla request %s for vehicle %s: Data received" % (statusName, vehicleId))
-		self.debugLog(str(self.response))
-		self.debugLog("")
+		#self.debugLog(str(self.response))
+		#self.debugLog("")
 		if (self.response == "Incomplete"):
 			return
 		for k,v in sorted(self.response.items()):
-			self.debugLog("State %s, value %s, type %s" % (k,v,type(v)))
+			#self.debugLog("State %s, value %s, type %s" % (k,v,type(v)))
 			self.states[k] = v
 			if (type(v) is dict):
 				indigo.server.log(u"Skipping state %s: JSON Dict found" % (k))

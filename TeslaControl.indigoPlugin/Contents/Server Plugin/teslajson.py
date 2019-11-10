@@ -3,8 +3,6 @@ https://github.com/gglockner/teslajson
 
 The Tesla JSON API is described at:
 http://docs.timdorr.apiary.io/
->>>moved to>>>
-https://tesla-api.timdorr.com/
 
 Example:
 
@@ -27,7 +25,7 @@ import datetime
 import calendar
 
 import logging
-logger = logging.getLogger("Plugin.Tesla") #Call it whatever I like
+logger = logging.getLogger("Plugin.Tesla") #Can call it whatever I like
 
 class Connection(object):
 	"""Connection to Tesla Motors API"""
@@ -65,9 +63,9 @@ class Connection(object):
 				"email" : email,
 				"password" : password }
 			self.expiration = 0 # force refresh
-		#treply = self.get('vehicles')
+		treply = self.get('vehicles')
 		#logger.debug(treply)
-		self.vehicles = [Vehicle(v, self) for v in self.get('vehicles')['response']]
+		self.vehicles = [Vehicle(v, self) for v in self.get('vehicles')['response']]  #  $array['response']
 
 	def get(self, command):
 		"""Utility command to get data from API"""
@@ -77,8 +75,9 @@ class Connection(object):
 		"""Utility command to post data to API"""
 		now = calendar.timegm(datetime.datetime.now().timetuple())
 		if now > self.expiration:
+			logger.debug(u"Token expired - renewing oauth token for 44 days...")
 			auth = self.__open("/oauth/token", data=self.oauth)
-			self.expiration = auth['created_at'] + auth['expires_in'] - 86400
+			self.expiration = auth['created_at'] + auth['expires_in'] - 86400  #45 days minus 24 hours
 			self.__sethead(auth['access_token'])
 		return self.__open("%s%s" % (self.api, command), headers=self.head, data=data)
 
