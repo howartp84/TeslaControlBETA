@@ -3,6 +3,8 @@ https://github.com/gglockner/teslajson
 
 The Tesla JSON API is described at:
 http://docs.timdorr.apiary.io/
+>>>moved to>>>
+https://tesla-api.timdorr.com/
 
 Example:
 
@@ -23,6 +25,9 @@ except: # Python 2
 import json
 import datetime
 import calendar
+
+import logging
+logger = logging.getLogger("Plugin.Tesla") #Call it whatever I like
 
 class Connection(object):
 	"""Connection to Tesla Motors API"""
@@ -52,7 +57,7 @@ class Connection(object):
 		self.__sethead(access_token)
 		if not access_token:
 			tesla_client = self.__open2("/raw/pS7Z6yyP", baseurl="http://pastebin.com") #This is TimDorr's version, without id and api
-			#raise ValueError(tesla_client[0])
+			#logger.debug("PAH Test")
 			self.oauth = {
 				"grant_type" : "password",
 				"client_id" : tesla_client[0],
@@ -60,6 +65,8 @@ class Connection(object):
 				"email" : email,
 				"password" : password }
 			self.expiration = 0 # force refresh
+		#treply = self.get('vehicles')
+		#logger.debug(treply)
 		self.vehicles = [Vehicle(v, self) for v in self.get('vehicles')['response']]
 
 	def get(self, command):

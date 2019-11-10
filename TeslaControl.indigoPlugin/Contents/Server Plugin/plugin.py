@@ -129,6 +129,9 @@ class Plugin(indigo.PluginBase):
 				self.debugLog(traceback.format_exc())
 			self.vehicles = dict((unicode(v['id']),v) for v in connection.vehicles)
 			indigo.server.log("%i vehicles found" % len(self.vehicles))
+			#self.debugLog(self.vehicles)
+			for v in self.vehicles:
+				self.debugLog(u"Vehicle %s: %s [%s]" % (v,self.vehicles[v]['display_name'],self.vehicles[v]['vin']))
 		return self.vehicles
 
 	# Generate list of cars	
@@ -163,7 +166,13 @@ class Plugin(indigo.PluginBase):
 		vehicleId = dev.pluginProps['car']
 		commandName = action.pluginTypeId
 		indigo.server.log("Tesla command %s for vehicle %s" % (commandName, vehicleId))
-		vehicle = self.getVehicles()[vehicleId]
+		try:
+			vehicle = self.getVehicles()[vehicleId]
+		except KeyError:
+			self.errorLog(u"Vehicle ID %s not recognised.  Please edit your Tesla Vehicle device and re-select the appropriate car." % vehicleId)
+			dev = indigo.devices[devId]
+			self.debugLog(u"Indigo device '%s' holds vehicleId of %s but this no longer exists in the vehicle list held by Tesla." % (dev.name,vehicleId))
+			return
 		if commandName == "wake_up":
 			self.response = vehicle.wake_up()
 			self.debugLog(self.response)
@@ -211,7 +220,13 @@ class Plugin(indigo.PluginBase):
 		
 	def vehicleStatus2(self,statusName,vehicleId,devId):
 		indigo.server.log("Tesla request %s for vehicle %s: Initialising" % (statusName, vehicleId))
-		vehicle = self.getVehicles()[vehicleId]
+		try:
+			vehicle = self.getVehicles()[vehicleId]
+		except KeyError:
+			self.errorLog(u"Vehicle ID %s not recognised.  Please edit your Tesla Vehicle device and re-select the appropriate car." % vehicleId)
+			dev = indigo.devices[devId]
+			self.debugLog(u"Indigo device '%s' holds vehicleId of %s but this no longer exists in the vehicle list held by Tesla." % (dev.name,vehicleId))
+			return
 		dev = indigo.devices[devId]
 		
 		#self.debugLog(statusName)
