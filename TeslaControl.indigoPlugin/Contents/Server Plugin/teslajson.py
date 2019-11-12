@@ -24,6 +24,8 @@ import json
 import datetime
 import calendar
 
+import requests #instead of urllib2.request
+
 import logging
 logger = logging.getLogger("Plugin.Tesla") #Can call it whatever I like
 
@@ -89,17 +91,31 @@ class Connection(object):
 		"""Raw urlopen command"""
 		if not baseurl:
 			baseurl = self.baseurl
-		req = Request("%s%s" % (baseurl, url), headers=headers)
-		try:
-			req.data = urlencode(data).encode('utf-8') # Python 3
-		except:
+		#req = Request("%s%s" % (baseurl, url), headers=headers)
+		#try:
+			#req.data = urlencode(data).encode('utf-8') # Python 3
+		#except:
+			#try:
+				#req.add_data(urlencode(data)) # Python 2
+			#except:
+				#pass
+		if (data == None):
+			#resp = urlopen(req)
+			resp = requests.get("%s%s" % (baseurl, url), headers=headers)
+		else:
 			try:
-				req.add_data(urlencode(data)) # Python 2
+				data2 = urlencode(data)
+				resp = requests.post("%s%s" % (baseurl, url), headers=headers, data=data2)
 			except:
-				pass
-		resp = urlopen(req)
-		charset = resp.info().get('charset', 'utf-8')
-		return json.loads(resp.read().decode(charset))
+				resp = requests.post("%s%s" % (baseurl, url), headers=headers)
+		
+		#charset = resp.info().get('charset', 'utf-8')
+		resp.encoding = 'utf-8'
+		#return json.loads(resp.read().decode(charset))
+		#logger.debug(resp)
+		logger.debug("Pre-JSON: %s" % resp.text)
+		#logger.debug(json.loads(resp.text))
+		return json.loads(resp.text)
 
 	def __open2(self, url, headers={}, data=None, baseurl=""):
 		"""Raw urlopen command"""
@@ -132,7 +148,7 @@ class Vehicle(dict):
 	def data_request(self, name):
 		"""Get vehicle data"""
 		result = self.get('data_request/%s' % name)
-		return result['response']
+		return result
 
 	def wake_up(self):
 		"""Wake the vehicle"""

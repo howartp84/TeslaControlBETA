@@ -181,6 +181,7 @@ class Plugin(indigo.PluginBase):
 		#self.debugLog(data)
 		i = 0
 		validReasons = ["already on", "already off",""]
+		invalidReasons = ["cabin comfort remote settings not enabled"]
 		self.response = "Incomplete"
 		while True:
 			try:
@@ -200,10 +201,23 @@ class Plugin(indigo.PluginBase):
 			if (self.response == "Incomplete"):
 				break
 			if (self.response["response"]["reason"] in validReasons) or self.response["response"]["result"] == True:
+				indigo.server.log("Sent %s successfully.  Refreshing appropriate states..." % commandName)
 				self.debugLog("Sent %s successfully.  Refreshing appropriate states..." % commandName)
 				action.pluginTypeId = self.cmdStates[commandName]
 				self.vehicleStatus(action,dev)
 				break
+			if (self.response["response"]["reason"] in invalidReasons):
+				indigo.server.log("Command %s declined:  %s" % (commandName,self.response["response"]["reason"]))
+				self.debugLog("Command %s declined:  %s" % (commandName,self.response["response"]["reason"]))
+				break
+			if "vehicle unavailable" in self.response["response"]["error"] or "mothership" in self.response["response"]["error"]:
+				indigo.server.log("Command %s declined:  Vehicle unavailable" % commandName)
+				self.debugLog("Command %s declined:  Vehicle unavailable" % commandName)
+				indigo.server.log(u"Automatically sending wake_up command before retrying...")
+				self.debugLog(u"Automatically sending wake_up command before retrying...")
+				vehicle.wake_up() #Try waking it up 
+				indigo.server.log(u"Waiting 30 seconds before retrying...")
+				time.sleep(30) #20 seconds here because loop waits 10 itself
 			else:
 				self.debugLog(u"Failed attempt %s/5 because: %s" % (i,self.response["response"]["reason"]))
 				if i > 3:
@@ -214,7 +228,7 @@ class Plugin(indigo.PluginBase):
 				else:
 					self.debugLog(u"Retrying in 10 seconds...")
 			if i >= 5:
-				#self.debugLog("Failed")
+				self.debugLog(u"%s failed after 5 attempts." % commandName)
 				indigo.server.log(u"%s failed after 5 attempts." % commandName)
 				break
 			i= i+1
@@ -266,40 +280,50 @@ class Plugin(indigo.PluginBase):
 			self.errorLog(e)
 			self.errorLog("Timeout retrieving status: {}".format(statusName))
 			self.debugLog(traceback.format_exc())
-		else:
-			indigo.server.log("Tesla request %s for vehicle %s: Data received" % (statusName, vehicleId))
-		#self.debugLog(str(self.response))
-		#self.debugLog("")
-		if (self.response == "Incomplete"):
+		self.debugLog(u"Response: %s" % str(self.response))
+		if (self.response == None):
+			self.errorLog("No reply...")
 			return
-		for k,v in sorted(self.response.items()):
+		if (self.response == "Incomplete"):
+			self.errorLog("Incomplete...")
+			return
+		if 'response' in self.response:
+			if self.response['response'] == None:
+				#self.debugLog("We don't appear to have an answer")
+				if 'error' in self.response:
+					#self.debugLog("ERROR ALERT")
+					if "vehicle unavailable" in self.response["error"]:
+						indigo.server.log("Command %s declined:  Vehicle unavailable" % statusName)
+						self.debugLog("Command %s declined:  Vehicle unavailable" % statusName)
+					elif "mothership" in self.response["error"]:
+						indigo.server.log("Command %s declined:  Mothership unavailable" % statusName)
+						self.debugLog("Command %s declined:  Mothership unavailable" % statusName)
+					else:
+						self.debugLog(u"No motherships found")
+						return
+					indigo.server.log(u"Automatically sending wake_up command before retrying...")
+					self.debugLog(u"Automatically sending wake_up command before retrying...")
+					vehicle.wake_up() #Try waking it up 
+					indigo.server.log(u"Waiting 30 seconds before retrying...")
+					time.sleep(30) #30 seconds
+					self.vehicleStatus2(statusName,vehicleId,devId)
+					return
+				else:
+					self.debugLog(u"No errors")
+					return
+			else:
+				indigo.server.log("Tesla request %s for vehicle %s: Data received" % (statusName, vehicleId))
+		for k,v in sorted(self.response['response'].items()):
 			#self.debugLog("State %s, value %s, type %s" % (k,v,type(v)))
 			self.states[k] = v
 			if (type(v) is dict):
-				indigo.server.log(u"Skipping state %s: JSON Dict found" % (k))
+				#indigo.server.log(u"Skipping state %s: JSON Dict found" % (k))
+				#self.debugLog(v)
+				for innerv in v:
+					#self.debugLog("State %s, value %s, type %s" % (innerv,v[innerv],type(v[innerv])))
+					self.updateTheState("%s_%s" % (k,innerv),v[innerv],dev)
 			else:
-				if (k in dev.states) and (self.resetStates == False):
-					#self.debugLog(str(type(v)))
-					dev.updateStateOnServer(k,v)
-					if (k == dev.ownerProps.get("stateToDisplay","")):
-						dev.updateStateOnServer("displayState",v)
-				else:
-					self.debugLog("New states found - recreating state list...")
-					self.resetStates = True #We obviously need to reset states if we've got data for one that doesn't exist
-					if (v == None):
-						self.strstates[k] = v
-					elif (type(v) is float):
-						self.numstates[k] = v
-					elif (type(v) is int):
-						self.numstates[k] = v
-					elif (type(v) is bool):
-						self.boolstates[k] = v
-					elif (type(v) is str):
-						self.strstates[k] = v
-					elif (type(v) is unicode):
-						self.strstates[k] = v
-					else:
-						self.strstates[k] = v
+				self.updateTheState(k,v,dev)
 		if (self.resetStates):
 			indigo.server.log("Tesla request %s for vehicle %s: New states found - reinitialising" % (statusName, vehicleId))
 			dev.stateListOrDisplayStateIdChanged()
@@ -321,6 +345,30 @@ class Plugin(indigo.PluginBase):
 			dev.updateStateOnServer("distanceFromHomeM",round(fromHomeM,2), uiValue=str(round(fromHomeM,2))+"m")
 			dev.updateStateOnServer("distanceFromWorkM",round(fromWorkM,2), uiValue=str(round(fromWorkM,2))+"m")
 
+	def updateTheState(self,inKey,inValue,dev):
+		if (inKey in dev.states) and (self.resetStates == False):
+			#self.debugLog(str(type(v)))
+			dev.updateStateOnServer(inKey,inValue)
+			if (inKey == dev.ownerProps.get("stateToDisplay","")):
+				dev.updateStateOnServer("displayState",inValue)
+		else:
+			#self.debugLog("New states found - recreating state list...")
+			self.resetStates = True #We obviously need to reset states if we've got data for one that doesn't exist
+			if (inValue == None):
+				self.strstates[inKey] = inValue
+			elif (type(inValue) is float):
+				self.numstates[inKey] = inValue
+			elif (type(inValue) is int):
+				self.numstates[inKey] = inValue
+			elif (type(inValue) is bool):
+				self.boolstates[inKey] = inValue
+			elif (type(inValue) is str):
+				self.strstates[inKey] = inValue
+			elif (type(inValue) is unicode):
+				self.strstates[inKey] = inValue
+			else:
+				self.strstates[inKey] = inValue
+
 	def getDistance(self,atLat,atLong,fromLat,fromLong):
 		# approximate radius of earth in km
 		R = 6373.0
@@ -338,7 +386,7 @@ class Plugin(indigo.PluginBase):
 
 		distance = R * c
 
-		self.debugLog(u"Result: %s" % distance)
+		#self.debugLog(u"Result: %s" % distance)
 		#self.debugLog(u"Should be: 278.546 km")
 		return distance
 	
